@@ -56,41 +56,90 @@ app.get("/api/persons/:id", (request, response) => {
 });
 
 app.delete("/api/persons/:id", (request, response) => {
-  const id = Number(request.params.id);
-  persons = persons.filter((person) => person.id !== id);
+  const id = request.params.id;
 
-  response.status(204).end();
+  // Use Mongoose's findByIdAndDelete method to delete the person by their ID
+  Person.findByIdAndDelete(id)
+    .then((deletedPerson) => {
+      if (deletedPerson) {
+        // If the person was found and deleted, send a 204 No Content response
+        response.status(204).end();
+      } else {
+        // If the person with the specified ID was not found, send a 404 Not Found response
+        response.status(404).json({ error: "Person not found" });
+      }
+    })
+    .catch((error) => {
+      // If an error occurred during the delete operation, send a 500 Internal Server Error response
+      console.error("Error deleting person:", error);
+      response.status(500).json({ error: "Internal Server Error" });
+    });
 });
 
-app.post("/api/persons", (request, response) => {
+app.post("/api/persons", async (request, response) => {
   const body = request.body;
 
+  // Validate the request body
   if (!body.name || !body.number) {
     return response.status(400).json({
       error: "Name or number missing",
     });
   }
 
+  // Create a new Person object using the request body
   const person = new Person({
-    id: generateId(),
     name: body.name,
     number: body.number,
   });
 
-  // if (
-  //   Person.find((ppl) => ppl.name.toLowerCase() === person.name.toLowerCase())
-  // ) {
-  //   return response.status(400).json({
-  //     error: "Name must be unique",
-  //   });
-  // }
+  try {
+    // Save the person to the database
+    const savedPerson = await person.save();
 
-  person.save().then((savedPerson) => {
+    // Respond with the saved person object
     response.json(savedPerson);
-  });
+  } catch (error) {
+    // If Mongoose validation fails, respond with a 400 status code and the validation error message
+    if (error.name === "ValidationError") {
+      return response.status(400).json({ error: error.message });
+    }
+    // For other types of errors, respond with a generic error message
+    response.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
-const PORT = process.env.PORT;
+app.put("/api/persons/:id", async (request, response) => {
+  const id = request.params.id;
+  const body = request.body;
+
+  // Create a new Person object with the updated information
+  const updatedPerson = {
+    name: body.name,
+    number: body.number,
+  };
+
+  try {
+    // Update the person in the database
+    const result = await Person.findByIdAndUpdate(id, updatedPerson, {
+      new: true,
+    });
+
+    if (!result) {
+      return response.status(404).json({ error: "Person not found" });
+    }
+
+    // Respond with the updated person object
+    response.json(result);
+  } catch (error) {
+    // If an error occurred during the update operation, respond with a 400 status code and the error message
+    console.error("Error updating person:", error);
+    response
+      .status(400)
+      .json({ error: "Failed to update person information." });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
